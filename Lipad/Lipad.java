@@ -26,12 +26,14 @@ public class Lipad {
     private final String consumerKey;
     private final String environment;
 
-    private static final String CHECKOUT_BASE_URL_PROD = "https://api.lipad.io/api/v1";
-    private static final String CHECKOUT_BASE_URL_SANDBOX = "https://checkout.uat.lipad.io/api/v1";
+    private static final String CHECKOUT_BASE_URL_PROD = "https://checkout.api.lipad.io";
+    private static final String CHECKOUT_BASE_URL_SANDBOX = "https://checkout.api.uat.lipad.io";
     private static final String DIRECT_CHARGE_BASE_URL_PROD = "https://charge.lipad.io/v1";
     private static final String DIRECT_CHARGE_BASE_URL_SANDBOX = "https://dev.charge.lipad.io/v1";
+    private static final String DIRECT_CHARGE_AUTH_URL_PRODUCTION = "https://charge.lipad.io/v1/auth";
+    private static final String DIRECT_CHARGE_AUTH_URL_SANDBOX = "https://dev.lipad.io/v1/auth";
     private static final String DIRECT_API_AUTH_URL_PROD = "https://api.lipad.io/v1/auth";
-    private static final String DIRECT_API_AUTH_URL_SANDBOX = "https://dev.lipad.io/v1/auth";
+    private static final String DIRECT_API_AUTH_URL_SANDBOX = "https://checkout.api.uat.lipad.io/api/v1/api-auth/access-token";
 
     public Lipad(String IVKey, String consumerSecret, String consumerKey, String environment) {
         this.IVKey = IVKey;
@@ -115,9 +117,13 @@ public class Lipad {
         connection.setRequestMethod("POST");
         connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
 
-        String requestBody = "consumer_key=" + URLEncoder.encode(consumerKey, StandardCharsets.UTF_8) +
-                "&consumer_secret=" + URLEncoder.encode(consumerSecret, StandardCharsets.UTF_8);
+        String requestBody = "consumerKey=" + URLEncoder.encode(consumerKey, StandardCharsets.UTF_8) +
+                "&consumerSecret=" + URLEncoder.encode(consumerSecret, StandardCharsets.UTF_8);
 
+        return getJsonObject(connection, requestBody);
+    }
+
+    private JSONObject getJsonObject(HttpURLConnection connection, String requestBody) throws Exception {
         connection.setDoOutput(true);
         try (OutputStream os = connection.getOutputStream()) {
             byte[] input = requestBody.getBytes(StandardCharsets.UTF_8);
@@ -133,9 +139,7 @@ public class Lipad {
                     response.append(inputLine);
                 }
 
-                JSONObject jsonResponse = new JSONObject(response.toString());
-                System.out.println(jsonResponse);
-                return jsonResponse;
+                return new JSONObject(response.toString());
             }
         } else if (responseCode == HttpURLConnection.HTTP_UNAUTHORIZED) {
             System.out.println("Invalid Credentials!");
@@ -145,9 +149,25 @@ public class Lipad {
         }
     }
 
+    private JSONObject getDirectChargeAccessToken(String consumerKey, String consumerSecret) throws Exception {
+        String apiUrl = environment.equals("production") ? DIRECT_CHARGE_AUTH_URL_PRODUCTION : DIRECT_CHARGE_AUTH_URL_SANDBOX;
+
+        URI uri = new URI(apiUrl);
+        URL url = uri.toURL();
+        HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+        connection.setRequestMethod("POST");
+        connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
+
+        String requestBody = "consumer_key=" + URLEncoder.encode(consumerKey, StandardCharsets.UTF_8) +
+                "&consumer_secret=" + URLEncoder.encode(consumerSecret, StandardCharsets.UTF_8);
+
+        return getJsonObject(connection, requestBody);
+    }
+
+
     private String getCheckoutStatus(String merchant_transaction_id, String access_token) throws Exception {
-        String apiUrl = environment.equals("production") ? STR."\{CHECKOUT_BASE_URL_PROD}/checkout/request/status?merchant_transaction_id=" :
-                STR."\{CHECKOUT_BASE_URL_SANDBOX}/checkout/request/status?merchant_transaction_id=";
+        String apiUrl = environment.equals("production") ? STR."\{CHECKOUT_BASE_URL_PROD}/api/v1/checkout/request/status?merchant_transaction_id=" :
+                STR."\{CHECKOUT_BASE_URL_SANDBOX}/api/v1/checkout/request/status?merchant_transaction_id=";
 
         apiUrl += URLEncoder.encode(merchant_transaction_id, StandardCharsets.UTF_8);
 
@@ -158,15 +178,7 @@ public class Lipad {
         connection.setRequestMethod("GET");
         connection.setRequestProperty("Authorization", "Bearer " + access_token);
 
-
-        System.out.println("Request URL: " + url);
-        System.out.println("Request Method: " + connection.getRequestMethod());
-        System.out.println("Authorization: Bearer " + access_token);
-
-
-
         int responseCode = connection.getResponseCode();
-        System.out.println(STR."Response Code Received: \{responseCode}");
         if (responseCode == HttpURLConnection.HTTP_OK) {
             try (BufferedReader in = new BufferedReader(new InputStreamReader(connection.getInputStream()))) {
                 String inputLine;
@@ -175,8 +187,6 @@ public class Lipad {
                 while ((inputLine = in.readLine()) != null) {
                     response.append(inputLine);
                 }
-                System.out.println(response);
-                LOGGER.info(STR."Checkout Status Response: \{response.toString()}");
                 return response.toString();
             }
         } else if (responseCode == HttpURLConnection.HTTP_UNAUTHORIZED) {
@@ -201,54 +211,44 @@ public class Lipad {
         }
     }
 
+public void directCharge(String payload, String consumerKey, String consumerSecret) {
+    try {
+        String baseUrl = environment.equals("production") ? DIRECT_CHARGE_BASE_URL_PROD : DIRECT_CHARGE_BASE_URL_SANDBOX;
+        baseUrl += "/mobile-money/charge";
 
-//    public JSONObject checkCheckoutStatus(String merchant_transaction_id) throws Exception {
-//        JSONObject accessTokenResponse = getAccessToken(consumerKey, consumerSecret);
-//        String accessToken = accessTokenResponse.optString("access_token");
-//        String checkoutStatusResponse = getCheckoutStatus(merchant_transaction_id, accessToken);
-//        return new JSONObject(checkoutStatusResponse);
-//    }
-
-    public void directCharge(String payload, String consumerKey, String consumerSecret) {
+        JSONObject accessTokenResponse;
         try {
-            String baseUrl = environment.equals("production") ? DIRECT_CHARGE_BASE_URL_PROD + "?payment_method=" : DIRECT_CHARGE_BASE_URL_SANDBOX + "?payment_method=";
-            JSONObject accessTokenResponse;
-            try {
-                accessTokenResponse = getAccessToken(consumerKey, consumerSecret);
-            } catch (Exception e) {
-                LOGGER.log(Level.SEVERE, "Error in getAccessToken", e);
-                return;
-            }
-
-            String accessToken = accessTokenResponse.optString("access_token");
-            LOGGER.info("Access Token: " + accessToken);
-
-            JSONObject paymentPayload = new JSONObject(payload);
-
-            Map<String, String> paymentMethodMap = new HashMap<>();
-            paymentMethodMap.put("MPESA_KEN", "mpesa");
-            paymentMethodMap.put("AIRTEL_KEN", "airtel_money");
-
-            String paymentMethodCode = paymentPayload.optString("payment_method_code");
-            String endpoint = paymentMethodCode != null ? paymentMethodMap.get(paymentMethodCode) : null;
-
-            if (endpoint != null && !endpoint.isEmpty()) {
-                String url = baseUrl + endpoint;
-                LOGGER.info("Endpoint: " + url);
-
-                Map<String, Object> response = postRequest(url, buildPaymentPayload(paymentPayload), accessToken);
-                LOGGER.info("Response: " + response);
-
-            } else {
-                throw new Exception("Invalid payment method code: " + paymentPayload.optString("payment_method_code"));
-            }
-        } catch (Exception error) {
-            LOGGER.log(Level.SEVERE, "Error: " + error.getMessage(), error);
+            accessTokenResponse = getDirectChargeAccessToken(consumerKey, consumerSecret);
+        } catch (Exception e) {
+            LOGGER.log(Level.SEVERE, "Error in getAccessToken", e);
+            return;
         }
-    }
 
-//    private JSONObject buildPaymentPayload(@org.jetbrains.annotations.NotNull JSONObject payload) {
-private JSONObject buildPaymentPayload(JSONObject payload) {
+        String accessToken = accessTokenResponse.optString("access_token");
+        LOGGER.info("Access Token: " + accessToken);
+
+        JSONObject paymentPayload = new JSONObject(payload);
+
+        Map<String, String> paymentMethodMap = new HashMap<>();
+        paymentMethodMap.put("MPESA_KEN", "mpesa");
+        paymentMethodMap.put("AIRTEL_KEN", "airtel_money");
+
+        String paymentMethodCode = paymentPayload.optString("payment_method_code");
+        String endpoint = paymentMethodCode != null ? paymentMethodMap.get(paymentMethodCode) : null;
+
+        if (endpoint != null && !endpoint.isEmpty()) {
+
+            Map<String, Object> response = postRequest(baseUrl, buildPaymentPayload(paymentPayload), accessToken);
+
+        } else {
+            throw new Exception("Invalid payment method code: " + paymentPayload.optString("payment_method_code"));
+        }
+    } catch (Exception error) {
+        LOGGER.log(Level.SEVERE, "Error: " + error.getMessage(), error);
+    }
+}
+
+    private JSONObject buildPaymentPayload(JSONObject payload) {
         JSONObject commonPayload = new JSONObject();
         commonPayload.put("external_reference", payload.opt("external_reference"));
         commonPayload.put("origin_channel_code", "API");
@@ -269,16 +269,20 @@ private JSONObject buildPaymentPayload(JSONObject payload) {
         commonPayload.put("notify_client", payload.opt("notify_client"));
         commonPayload.put("notify_originator", payload.opt("notify_originator"));
 
-        JSONObject mpesaPayload = new JSONObject(commonPayload, JSONObject.getNames(commonPayload));
-        mpesaPayload.put("payment_method_code", "MPESA_KEN");
-        mpesaPayload.put("paybill", payload.opt("paybill"));
-
-        JSONObject airtelPayload = new JSONObject(commonPayload, JSONObject.getNames(commonPayload));
-        airtelPayload.put("payment_method_code", "AIRTEL_KEN");
-
-        JSONObject resultPayload = "MPESA_KEN".equals(payload.opt("payment_method_code")) ? mpesaPayload : airtelPayload;
-        System.out.println("Built Payload: " + resultPayload);
-        return "MPESA_KEN".equals(payload.opt("payment_method_code")) ? mpesaPayload : airtelPayload;
+        // Check the payment method code to determine the payload
+        String paymentMethodCode = payload.optString("payment_method_code");
+        if ("MPESA_KEN".equals(paymentMethodCode)) {
+            JSONObject mpesaPayload = new JSONObject(commonPayload, JSONObject.getNames(commonPayload));
+            mpesaPayload.put("payment_method_code", "MPESA_KEN");
+            mpesaPayload.put("paybill", payload.opt("paybill"));
+            return mpesaPayload;
+        } else if ("AIRTEL_KEN".equals(paymentMethodCode)) {
+            JSONObject airtelPayload = new JSONObject(commonPayload, JSONObject.getNames(commonPayload));
+            airtelPayload.put("payment_method_code", "AIRTEL_KEN");
+            return airtelPayload;
+        } else {
+            throw new IllegalArgumentException("Invalid payment method code: " + paymentMethodCode);
+        }
     }
 
     private Map<String, Object> postRequest(String url, JSONObject data, String accessToken) {
@@ -287,14 +291,10 @@ private JSONObject buildPaymentPayload(JSONObject payload) {
             HttpURLConnection connection = (HttpURLConnection) uri.toURL().openConnection();
             connection.setRequestMethod("POST");
 
-            System.out.println("Access Token in Header: " + accessToken);
-
             connection.setRequestProperty("x-access-token", accessToken);
             connection.setRequestProperty("Content-Type", "application/json");
             connection.setDoOutput(true);
 
-            System.out.println("Sending POST request to: " + url);
-            System.out.println("Request Body: " + data.toString());
 
             try (OutputStream os = connection.getOutputStream()) {
                 byte[] input = data.toString().getBytes(StandardCharsets.UTF_8);
@@ -339,7 +339,7 @@ private JSONObject buildPaymentPayload(JSONObject payload) {
         try {
             JSONObject accessTokenResponse;
             try {
-                accessTokenResponse = getAccessToken(consumerKey, consumerSecret);
+                accessTokenResponse = getDirectChargeAccessToken(consumerKey, consumerSecret);
             } catch (Exception e) {
                 LOGGER.log(Level.SEVERE, "Error in getAccessToken", e);
                 throw new RuntimeException("Failed to get access token.", e);

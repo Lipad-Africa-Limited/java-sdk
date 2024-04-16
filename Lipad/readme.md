@@ -14,45 +14,31 @@ Before getting started, ensure you have the following:
 
 ## Installation
 
-1. **Download the Lipad SDK:**
-   Download the Lipad SDK and include it in your project.
-
-   ```bash
-   # Example using pip
-   pip install lipad-sdk
-
-2. **Import the Lipad class and necessary libraries:**
+1. **Import the Lipad class:**
 
     ```bash
-   from lipad import Lipad
-   import json
-   import ayncio
+   package ConsumerCheckout;
+   import Lipad.Lipad;
 
-3. **Create an asynchronous main function.**
-
-    ```bash
-   async def main():
-
-    // Replace these values with your actual credentials
-    iv_key = "your_iv_key";
-    consumer_secret = "your_consumer_secret";
-    consumer_key = "your_consumer_key"
-    environment = "sandbox", "production";
-    charge_request_id = "your_charge_request_id"
-
-4. **Running the script**
-   ### To execute the script and run the main function, add the following line at the end of your script:
+2. **Create a Main function.**
 
     ```bash
-   if __name__ == "__main__":
-    asyncio.run(main())
+   public class Main {
+    public static void main(String[] args) {
+        String IVKey = <your_IVKey>;
+        String consumerSecret = <your_consumerKey>;
+        String consumerKey = <your_consumerKey>;
+        String chargeRequestId = <charge_request_id>;
+        String environment = <sandbox/production>;
+     }
+   }
 
 ## Checkout Usage
 
-1. **To initialize the Lipad class, provide the iv_key, consumer_key, consumer_secret, and environment parameters. The environment should be one of the following: 'production' or 'sandbox'.**
+1. **To initialize the Lipad class, provide the IVKey, consumerKey, consumerSecret, and environment parameters. The environment should be one of the following: 'production' or 'sandbox'.**
 
     ```bash
-   lipad = new Lipad(iv_key, consumer_key, consumer_secret, environment);
+   Lipad encryption = new Lipad(IVKey, consumerSecret, consumerKey, environment);
 
 2. **Validate Payload**
 
@@ -78,49 +64,48 @@ Before getting started, ensure you have the following:
            "language_code": "en",
            "service_code": "",
        }
-            lipad.validate_payload(payload)
+            encryption.validatePayload(payload);
 
-3. **Convert payload to JSON String and encrypt Payload**
-
-    ```bash
-    payload_json_string = json.dumps(payload)
-    encrypted_payload = checkout.encrypt(payload_json_string)
-    print("Encrypted Payload:", encrypted_payload)
-
-4. **Get Checkout Status**
+3. **Encrypt Payload**
 
     ```bash
-    merchant_transaction_id = payload.get("merchant_transaction_id")
-    print("Merchant Transaction ID:", merchant_transaction_id)
+    String encryptedPayload = encryption.encrypt(payload);
+
+4. **Extract Merchant transaction ID & Get Checkout Status**
+
+    ```bash
+    int startIndex = payload.indexOf("\"merchant_transaction_id\": \"") + "\"merchant_transaction_id\": \"".length();
+    int endIndex = payload.indexOf("\"", startIndex);
+    String merchant_transaction_id = payload.substring(startIndex, endIndex);
    
-    checkout_data = await checkout.check_checkout_status(merchant_transaction_id)
-    print("Checkout Data:", checkout_data)
+    JSONObject checkoutStatusJSON = encryption.checkCheckoutStatus(merchant_transaction_id);
+    System.out.println(STR."Checkout Status JSON: \{checkoutStatusJSON}");
 
-5. **Build Checkout URL**
+5. **Build & log Checkout URL**
 
     ```bash
-    checkout_url = f"https://checkout2.dev.lipad.io/?access_key={access_key}&payload={encrypted_payload}"
-    print("Checkout URL:", checkout_url)
+    String accessKey = <your_accessKey>;
+    String checkoutUrl = STR."https://checkout.dev.lipad.io/?access_key=\{encodeURIComponent(accessKey)}&payload=\{encodeURIComponent(encryptedPayload)}";
+    System.out.println(STR."Checkout URL: \{checkoutUrl}");
+   
 
 ## Direct API Usage
 
-1. **To initialize the Lipad class, provide the iv_key, consumer_key, consumer_secret, and environment parameters. The environment should be one of the following: 'production' or 'sandbox'.**
+1. **To initialize the Lipad class, provide the IVKey, consumerKey, consumerSecret, and environment parameters. The environment should be one of the following: 'production' or 'sandbox'.**
 
     ```bash
-    lipad = new Lipad(iv_key, consumer_key, consumer_secret, environment);
+    Lipad encryption = new Lipad(IVKey, consumerSecret, consumerKey, environment);
 
 2. **Direct Charge**
 
     ```bash
-    await lipad.direct_charge(json.dumps(payload))
+    encryption.directCharge(payload, consumerKey, consumerSecret);
 
 3. **Get Charge Request Status**
 
     ```bash
-    checkout_request_status = await checkout.get_charge_request_status(
-    chargeRequestId
-    )
-    print("Checkout Request Status", checkout_request_status)
+    Map<String, Object> result = encryption.getChargeRequestStatus(chargeRequestId, consumerKey, consumerSecret);
+    System.out.println(result);
 
 # License
 
